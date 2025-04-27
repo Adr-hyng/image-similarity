@@ -88,11 +88,11 @@ class ImageSimilarity():
     def _sub_process(para):
         '''A sub-process function of `multiprocessing`.
 
-        Download image from url and process it into a numpy array.
+        Load image from local path OR download from URL and process it into a numpy array.
 
         Args:
             para: input parameters of one image.
-                - path: path of the image, online url by default.
+                - path: path of the image, local file path or online url.
                 - fields: all other fields.
 
         Returns:
@@ -103,15 +103,24 @@ class ImageSimilarity():
         '''
         path, fields = para['path'], para['fields']
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36'}
-            res = requests.get(path, headers=headers)
-            feature = DeepModel.preprocess_image(BytesIO(res.content))
+            if path.startswith('http://') or path.startswith('https://'):
+                # Load from URL
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36'}
+                res = requests.get(path, headers=headers)
+                image_data = BytesIO(res.content)
+            else:
+                # Load from local file
+                with open(path, 'rb') as f:
+                    image_data = BytesIO(f.read())
+
+            feature = DeepModel.preprocess_image(image_data)
             return feature, fields
 
         except Exception as e:
-            print('Error downloading %s: %s' % (fields[0], e))
+            print('Error loading %s: %s' % (fields[0], e))
 
         return None, None
+
 
     @staticmethod
     def load_data_csv(fname, delimiter=None, include_header=True, cols=None):
