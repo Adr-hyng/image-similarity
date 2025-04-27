@@ -294,12 +294,12 @@ if __name__ == '__main__':
     similarity.num_processes = 2
 
     '''Load source data'''
-    test1 = similarity.load_data_csv('./demo/test1.csv', delimiter=',')
-    test2 = similarity.load_data_csv('./demo/test2.csv', delimiter=',', cols=['id', 'url'])
+    comparison_dataset = similarity.load_data_csv('./demo/test1.csv', delimiter=',')
+    original_dataset = similarity.load_data_csv('./demo/test2.csv', delimiter=',', cols=['id', 'url'])
 
     '''Save features and fields'''
-    similarity.save_data('test1', test1)
-    similarity.save_data('test2', test2)
+    similarity.save_data('test1', comparison_dataset)
+    similarity.save_data('test2', original_dataset)
 
     '''Calculate similarities'''
     result = similarity.iteration(['test1_id', 'test1_url', 'test2_id', 'test2_url'], thresh=0.845)

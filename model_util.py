@@ -3,11 +3,12 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 import numpy as np
 
-from tensorflow.python.keras.applications.mobilenet import MobileNet, preprocess_input
-from tensorflow.python.keras.preprocessing import image as process_image
-from tensorflow.python.keras.utils import Sequence
-from tensorflow.python.keras.layers import GlobalAveragePooling2D
-from tensorflow.python.keras import Model
+# from tensorflow.python.keras.applications.mobilenet import MobileNet, preprocess_input
+from tensorflow.keras.applications.mobilenet import MobileNet, preprocess_input
+from tensorflow.keras.preprocessing import image as process_image
+from tensorflow.keras.utils import Sequence
+from tensorflow.keras.layers import GlobalAveragePooling2D
+from tensorflow.keras import Model
 
 
 class DeepModel():
@@ -77,7 +78,7 @@ class DeepModel():
         Returns:
             The output features of all inputs.
         '''
-        features = self._model.predict_generator(generator)
+        features = self._model.predict(generator, verbose=1)
         return features
 
 
