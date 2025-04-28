@@ -11,6 +11,8 @@ from multiprocessing import Pool
 import requests
 from model_util import DeepModel, DataSequence
 
+from collections import defaultdict
+
 
 def load_images_from_folder(folder):
     exts = {'.jpg', '.jpeg', '.png', '.bmp', '.gif'}
@@ -113,14 +115,76 @@ class ImageSimilarity:
 
 def plot_and_open_heatmap(dist, src_names, tgt_names, out='heatmap.png'):
     plt.figure(figsize=(8,6))
-    plt.imshow(dist, cmap=plt.cm.Greens_r)
+    im = plt.imshow(dist, cmap=plt.cm.Greens_r)
     plt.colorbar(label='Cosine similarity')
+    # annotate each cell with the numeric value
+    for i in range(dist.shape[0]):
+        for j in range(dist.shape[1]):
+            plt.text(j, i, f"{dist[i,j]:.2f}", ha='center', va='center', fontsize=8, color='black')
     plt.xticks(range(len(tgt_names)), tgt_names, rotation=45, ha='right')
     plt.yticks(range(len(src_names)), src_names)
     plt.tight_layout()
     plt.savefig(out)
     print(f"Heatmap saved to {out}")
     os.system(f'explorer.exe {out}')
+    
+def get_similar_pairs(dist, src_names, tgt_names, thresh=0.845):
+    """
+    Returns a list of (i, j, score) for all src i / tgt j pairs
+    where score ≥ thresh, excluding the trivial self-matches i==j.
+    """
+    pairs = []
+    n_src, n_tgt = dist.shape
+    for i in range(n_src):
+        for j in range(n_tgt):
+            if i == j:
+                # skip the self-match when source==target
+                continue
+            score = dist[i, j]
+            if score >= thresh:
+                pairs.append((i, j, score))
+    # sort descending by score
+    pairs.sort(key=lambda x: x[2], reverse=True)
+    return pairs
+
+def print_similarity_groups(passed, src_names, tgt_names):
+    # build a map: src_name → [tgt_name, …], excluding tgt == src
+    groups = defaultdict(list)
+    for i, j, score in passed:
+        src, tgt = src_names[i], tgt_names[j]
+        if src != tgt:                 # skip self
+            groups[src].append(tgt)
+
+    # now print only those with non‐empty lists
+    for src, tgts in groups.items():
+        if not tgts:
+            continue
+        tgt_list = ', '.join(tgts)
+        print(f"{src} similar to [{tgt_list}]")
+
+def process_pair(src_dir, tgt_dir, args):
+    # load images
+    src = load_images_from_folder(src_dir)
+    tgt = load_images_from_folder(tgt_dir)
+    if not src or not tgt:
+        print(f"No images found in {src_dir} or {tgt_dir}, skipping.")
+        return
+
+    sim = ImageSimilarity(batch_size=args.batch_size, num_processes=args.processes)
+    sim.save_data('source', src)
+    sim.save_data('target', tgt)
+
+    header = ['src_name', 'src_path', 'tgt_name', 'tgt_path']
+    dist = sim.iteration(header, thresh=args.threshold)
+    src_names = [n for n, _ in src]
+    tgt_names = [n for n, _ in tgt]
+
+    passed = get_similar_pairs(dist, src_names, tgt_names, thresh=args.threshold)
+    print_similarity_groups(passed, src_names, tgt_names)
+
+    print('Distance matrix shape:', dist.shape)
+
+    plot_and_open_heatmap(dist, src_names, tgt_names)
 
 
 if __name__ == '__main__':
@@ -129,22 +193,28 @@ if __name__ == '__main__':
     parser.add_argument('target', nargs='?', help='Path to target images folder (optional)')
     parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--processes', type=int, default=4)
-    parser.add_argument('--threshold', type=float, default=0.845)
+    parser.add_argument('--threshold', type=float, default=0.84)
+    parser.add_argument('--iter', type=int, default=1)
     args = parser.parse_args()
 
-    src_dir = args.source
-    tgt_dir = args.target if args.target else args.source
+    if not args.source:
+        parser.print_usage()
+        print("Error: source folder path is required.")
+        sys.exit(1)
 
-    src = load_images_from_folder(src_dir)
-    tgt = load_images_from_folder(tgt_dir)
+    src_root = args.source
+    tgt_root = args.target if args.target else args.source
 
-    sim = ImageSimilarity(batch_size=args.batch_size, num_processes=args.processes)
-    sim.save_data('source', src)
-    sim.save_data('target', tgt)
+    # detect subdirectories
+    subdirs = [os.path.join(src_root, d) for d in sorted(os.listdir(src_root))
+               if os.path.isdir(os.path.join(src_root, d))]
+    # if there are subdirectories, process each one; else process the root itself
+    if subdirs:
+        for i, sub in enumerate(subdirs):
+            if i >= args.iter: break
+            print(f"\n=== Folder: {os.path.basename(sub)} ===")
+            tgt_sub = os.path.join(tgt_root, os.path.basename(sub)) if args.target else sub
+            process_pair(sub, tgt_sub, args)
+    else:
+        process_pair(src_root, tgt_root, args)
 
-    header = ['src_name', 'src_path', 'tgt_name', 'tgt_path']
-    dist = sim.iteration(header, thresh=args.threshold)
-    print('Distance matrix shape:', dist.shape)
-    print(dist)
-
-    plot_and_open_heatmap(dist, [n for n,_ in src], [n for n,_ in tgt])
